@@ -1,0 +1,231 @@
+很多时候，我们的mysql数据是json格式，我们希望能够直接使用mysql解析使用，mysql 5.6不支持sql中直接解析json字符串
+
+
+假如机器上没有mysql或者想使用特定版本的mysql版本
+
+使用root账号
+yum -y install gcc gcc-c++ gcc-g77 autoconf automake zlib* fiex* libxml* ncurses* libmcrypt* libtool-ltdl-devel* make cmake --必要软件包安装
+
+如果安装mysql57，则需要安装cmake-2.8.2（含）以上版本, 下载地址: https://cmake.org/files/v3.7/cmake-3.7.0.tar.gz
+
+增加用户，最好指定用户主目录， 共用一台机器的时候/home/xxx/目录容易满：useradd mysql56 -d /home/disk3/mysql56
+
+ 
+
+下载地址: https://dev.mysql.com/downloads/mysql/, 选择source code后， 最下面2个mysql和boost的2个generic的源码包
+
+使用mysql账号安装(否则启动时候权限问题比较麻烦)
+wget http://dev.mysql.com/get/Downloads/MySQL-5.6/mysql-5.6.32.tar.gz -O mysql-5.6.32.tar.gz下载到/home/mysql/tools目录中
+tar -zxvf mysql-5.6.10.tar.gz
+mkdir mysql-5.6.32-output
+cd mysql-5.6.10
+mysql_home=/home/disk4/mysql56/tools/mysql-5.6.32-output
+cmake \
+-DCMAKE_INSTALL_PREFIX=${mysql_home} \
+-DSYSCONFDIR=${mysql_home}/etc \
+-DMYSQL_DATADIR=${mysql_home}/data \
+-DMYSQL_UNIX_ADDR=${mysql_home}/mysqld.sock \
+-DMYSQL_USER=mysql \
+-DMYSQL_TCP_PORT=3307 \
+-DWITH_MYISAM_STORAGE_ENGINE=1 \
+-DWITH_INNOBASE_STORAGE_ENGINE=1 \
+-DWITH_MEMORY_STORAGE_ENGINE=1 \
+-DWITH_PARTITION_STORAGE_ENGINE=1 \
+-DEXTRA_CHARSETS=all \
+-DDEFAULT_CHARSET=utf8 \
+-DDEFAULT_COLLATION=utf8_general_ci \
+-DENABLED_LOCAL_INFILE=1 \
+-DWITH_READLINE=1
+
+如果是mysq57
+cmake \
+-DCMAKE_INSTALL_PREFIX=${mysql_home} \
+-DSYSCONFDIR=${mysql_home}/etc \
+-DMYSQL_DATADIR=${mysql_home}/data \
+-DMYSQL_UNIX_ADDR=${mysql_home}/mysqld.sock \
+-DMYSQL_USER=mysql \
+-DMYSQL_TCP_PORT=3307 \
+-DWITH_MYISAM_STORAGE_ENGINE=1 \
+-DWITH_INNOBASE_STORAGE_ENGINE=1 \
+-DWITH_MEMORY_STORAGE_ENGINE=1 \
+-DWITH_PARTITION_STORAGE_ENGINE=1 \
+-DEXTRA_CHARSETS=all \
+-DDEFAULT_CHARSET=utf8 \
+-DDEFAULT_COLLATION=utf8_general_ci \
+-DENABLED_LOCAL_INFILE=1 \
+-DWITH_READLINE=1 \
+-DDOWNLOAD_BOOST=0 \ #是否下载boost
+-DWITH_BOOST=/home/disk3/mysql57/tools/mysql-5.7.20/boost/boost_1_59_0/ #boost所在路径，如果从上面的generic包解压的话，它会自动解压在同目录的mysql目录中，直接如此指定即可
+
+make -j `grep processor /proc/cpuinfo | wc -l` && make install --编译安装
+mkdir -p ${mysql_home}/logs ${mysql_home}/etc ${mysql_home}/tmp
+chown -R mysql:mysql ${mysql_home} --设置目录权限
+
+#注意确保/etc/目录中的my.cnf是否存在，如存在，会优先读取这个， 但是自己验证了下，似乎不会有影响，只要编译时指定了自己的etc目录
+mysq56
+cat > ${mysql_home}/etc/my.cnf << EOF
+[client]
+port = 3306
+socket = ${mysql_home}/mysql.lock
+default-character-set=utf8
+
+[mysqld]
+init_connect = 'SET NAMES utf8'
+character-set-server = utf8
+binlog_format=mixed
+log-bin=${mysql_home}/logs/mysql-bin.log
+general_log=1
+general_log_file=${mysql_home}/logs/mysql.log
+log-error=${mysql_home}/logs/mysql-error.log
+slow_query_log=1
+slow_query_log_file=${mysql_home}/logs/mysql-slowquery.log
+pid-file= ${mysql_home}/mysqld.pid
+EOF
+
+mysql57
+cat > ${mysql_home}/etc/my.cnf << EOF
+[client]
+port = 3308
+socket = ${mysql_home}/mysql.lock
+default-character-set = utf8
+
+[mysqld]
+port = 3308
+socket = ${mysql_home}/mysql.lock
+
+basedir = ${mysql_home}
+datadir = ${mysql_home}/data
+tmpdir = ${mysql_home}/tmp
+pid-file = ${mysql_home}/mysqld.pid
+user = mysql
+bind-address = 0.0.0.0
+server-id = 1
+
+init-connect = 'SET NAMES utf8'
+character-set-server = utf8
+
+#skip-name-resolve
+#skip-networking
+back_log = 300
+sync_binlog = 1000
+
+max_connections = 1000
+max_connect_errors = 6000
+open_files_limit = 65535
+table_open_cache = 128
+max_allowed_packet = 64M
+binlog_cache_size = 1M
+max_heap_table_size = 8M
+tmp_table_size = 16M
+
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+sort_buffer_size = 8M
+join_buffer_size = 8M
+key_buffer_size = 4M
+
+thread_cache_size = 8
+
+query_cache_type = 1
+query_cache_size = 8M
+query_cache_limit = 2M
+
+ft_min_word_len = 4
+
+#log_bin = mysql-bin
+#binlog_format = mixed
+expire_logs_days = 7
+
+#binlog_format=mixed
+#log-bin=${mysql_home}/logs/mysql-bin.log
+general_log=1
+general_log_file=${mysql_home}/logs/mysql.log
+log_error = ${mysql_home}/logs/mysql-error.log
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = ${mysql_home}/logs/mysql-slow.log
+
+performance_schema = 0
+explicit_defaults_for_timestamp
+
+#lower_case_table_names = 1
+
+skip-external-locking
+
+default_storage_engine = InnoDB
+#default-storage-engine = MyISAM
+innodb_file_per_table = 1
+innodb_open_files = 500
+innodb_buffer_pool_size = 60G
+innodb_write_io_threads = 4
+innodb_read_io_threads = 4
+innodb_thread_concurrency = 0
+innodb_purge_threads = 1
+innodb_flush_log_at_trx_commit = 2
+innodb_log_buffer_size = 32M
+innodb_log_file_size = 2G
+innodb_log_files_in_group = 2
+innodb_max_dirty_pages_pct = 90
+innodb_lock_wait_timeout = 120
+
+bulk_insert_buffer_size = 8M
+myisam_sort_buffer_size = 8M
+myisam_max_sort_file_size = 10G
+myisam_repair_threads = 1
+
+interactive_timeout = 28800
+wait_timeout = 28800
+
+[mysqldump]
+quick
+max_allowed_packet = 64M
+
+[myisamchk]
+key_buffer_size = 8M
+sort_buffer_size = 8M
+read_buffer = 4M
+write_buffer = 4M
+
+[mysqld_safe]
+log-error = ${mysql_home}/logs/mysqld.log
+EOF
+
+初始化
+mysql56
+${mysql_home}/scripts/mysql_install_db --user=mysql --basedir=${mysql_home} --datadir=${mysql_home}/data --tmpdir=${mysql_home}/tmp
+
+mysql57
+${mysql_home}/bin/mysqld --defaults-file=${mysql_home}/etc/my.cnf --initialize-insecure
+可以删除etc, logs, tmp, data目录然后重新初始化步骤
+
+启动mysql
+${mysql_home}/support-files/mysql.server start/stop/restart
+source $HOME/.bash_profile && which mysql && (netstat -ant | grep 3308) --测试mysql是否成功启动
+
+修改root密码
+mysql56
+${mysql_home}/bin/mysql_secure_installation --禁止匿名用户及修改root密码
+
+mysql57
+dbrootpwd=xxxx #数据库root密码
+${mysql_home}/bin/mysql -e "grant all privileges on *.* to root@'127.0.0.1' identified by \"$dbrootpwd\" with grant option;"
+${mysql_home}/bin/mysql -e "grant all privileges on *.* to root@'localhost' identified by \"$dbrootpwd\" with grant option;"
+
+测试连接
+mysql -uroot -h127.0.0.1 -p${dbrootpwd}
+
+创建数据库及授权
+create database evaluation default charset utf8 COLLATE utf8_general_ci; 
+CREATE USER evaluation@'%' IDENTIFIED BY 'eval@123';
+GRANT ALL PRIVILEGES ON evaluation.* TO evaluation@'%' IDENTIFIED BY 'eval@123';
+flush privileges;
+
+以下全局系统设置
+使用root账号，在/etc/profile中，配置全局环境变量: export PATH=/home/mysql/tools/mysql-5.6.32-output/bin:$PATH
+如果要让其他用户也可以使用上面配置的mysql生效，需要将mysql的$HOME目录权限改为755, 且将其他用户需要加入mysql用户组: usermod -a -G g_mysql other_user
+
+使用root账号,以下为设置开机自启及启动服务
+cp /home/mysql/tools/mysql-5.6.32-output/support-files/mysql.server /etc/rc.d/init.d/mysql
+cp /home/mysql/tools/mysql-5.6.32-output/support-files/my-default.cnf /etc/my.cnf
+chkconfig --add mysql && chkconfig mysql on
+service mysql status|start|stop|restart
